@@ -147,8 +147,9 @@ checks, and so caps the `page-checked` charges of a run.
 point this Actor at, and for having the right to collect what you collect. The Actor honours
 `robots.txt` and spaces its requests, but that does not make a given use permitted.
 
-The `Dockerfile` names the Apify Python base image (`apify/actor-python:3.13`); it has not been
-built from this repo.
+The `Dockerfile` names the Apify Python base image (`apify/actor-python:3.13`), sets the working
+directory to `/usr/src/app`, and pins the Apify SDK to `apify==4.2.0`. It has not been built or
+run from this repo.
 
 ## Layout
 
