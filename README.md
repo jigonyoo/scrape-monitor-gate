@@ -6,7 +6,7 @@ report "no data" on the day it stopped working.
 
 ```
 make demo    # replays seven daily snapshots
-make test    # 11 tests
+make test    # 50 tests, no network
 ```
 
 ## The measured run
@@ -62,8 +62,10 @@ happened and hides the ones that did.
 
 ## Honest limits
 
-- It replays **saved snapshots**. There is no fetch layer here: no rate limiting, no retry policy,
-  no `robots.txt` handling, no headless browser. Point it at a directory of stored HTML.
+- `make demo` replays **saved snapshots**. The Actor (below) has a standard-library fetch layer
+  with `robots.txt`, per-domain spacing, retries and timeouts, but **no headless browser**: pages
+  that only render with JavaScript will look empty or blocked. The fetch layer is tested only
+  against a fake transport; it has not been run against a live site from this repo.
 - Nothing here evades a block. `SOFT_BLOCK` is a **report** — it tells you collection stopped so a
   person can decide whether to slow down, get an API, or stop. It does not rotate anything.
 - Block detection is a short English phrase list. A different provider or language needs its own.
@@ -71,11 +73,93 @@ happened and hides the ones that did.
   overnight would be flagged; that is the intended direction of the error.
 - Extraction is regex over fixed markup, sufficient to demonstrate drift handling and nothing more.
 
+## Apify Store
+
+The same rules packaged as an Apify Actor (`.actor/`, `Dockerfile`, `src/actor.py`). Each run
+checks every URL once and writes one dataset item per URL. The per-URL baseline is stored in the
+default key-value store under `MONITOR_STATE`, so on a **scheduled** Actor the "broken day never
+becomes the baseline" rule holds across runs exactly as it does across the replayed snapshots:
+only `OK` and `SCHEMA_DRIFT` runs become the comparison point.
+
+Locally, `make actor` reads `storage/key_value_stores/default/INPUT.json` and writes
+`storage/datasets/default/000000001.json`, ... (the Apify local storage layout). On the platform
+(`APIFY_IS_AT_HOME=1`) the same calls go through the Apify SDK, which is imported only there.
+Note that `make actor` makes real requests to the URLs in your input.
+
+**Input example**
+
+```json
+{
+  "startUrls": [{"url": "https://shop.example/listing"}],
+  "selectors": [
+    {"name": "gen2", "row": "<li class=\"listing\">(.*?)</li>",
+     "key": "<span class=\"title\">(.*?)</span>", "value": "<span class=\"amount\">(.*?)</span>"},
+    {"name": "gen1", "row": "<li class=\"row\">(.*?)</li>",
+     "key": "<span class=\"name\">(.*?)</span>", "value": "<span class=\"price\">(.*?)</span>"}
+  ],
+  "maxPages": 50,
+  "requestIntervalMillis": 2000,
+  "requestTimeoutSecs": 30,
+  "userAgent": "scrape-monitor-gate/0.1"
+}
+```
+
+Selectors are regular expressions (first group = the match), tried in order. `key` identifies an
+item between runs, `value` is what is watched. Keep old generations in the list — that is what
+lets a markup change arrive as `SCHEMA_DRIFT` with the rows still delivered.
+
+**Output example** — the 2026-03-07 fixture served as the seventh scheduled run (from the test
+suite, not a live site):
+
+```json
+{
+  "url": "https://shop.example/listing",
+  "checkedAt": "2026-03-07T06:00:00+00:00",
+  "checked": true,
+  "status": "OK",
+  "rowCount": 4,
+  "selector": "gen2",
+  "note": "",
+  "changes": [{"key": "Cyan", "before": "75.50", "after": "755.00", "ratio": 10.0}],
+  "rows": [{"key": "Alpha", "value": "100.00"}, {"key": "Bravo", "value": "205.00"},
+           {"key": "Cyan", "value": "755.00"}, {"key": "Delta", "value": "318.00"}],
+  "httpStatus": 200,
+  "attempts": 1
+}
+```
+
+`status` is one of `OK`, `SCHEMA_DRIFT`, `SOFT_BLOCK`, `PARTIAL`, `EMPTY_SOURCE` for a page that
+was received, or `FETCH_FAILED` / `ROBOTS_DISALLOWED` (`checked: false`) for one that was not. A
+page that was never received is reported but does not touch the baseline. If `robots.txt` cannot
+be read at all (network error or 5xx), the page is treated as disallowed.
+
+**Pay-per-event charges** (prices are set in Apify Console and are not decided here):
+
+| event | charged when |
+|---|---|
+| `page-checked` | once per URL that was fetched and classified, whatever its status |
+| `anomaly-detected` | additionally, once per checked URL whose status is `SCHEMA_DRIFT`, `SOFT_BLOCK` or `PARTIAL` |
+
+`FETCH_FAILED` and `ROBOTS_DISALLOWED` are not charged. `maxPages` caps how many URLs one run
+checks, and so caps the `page-checked` charges of a run.
+
+**You are responsible** for complying with the terms of service and `robots.txt` of every site you
+point this Actor at, and for having the right to collect what you collect. The Actor honours
+`robots.txt` and spaces its requests, but that does not make a given use permitted.
+
+The `Dockerfile` names the Apify Python base image (`apify/actor-python:3.13`); it has not been
+built from this repo.
+
 ## Layout
 
 ```
 fixtures/snapshots/   seven days, four planted failure modes
 src/monitor.py        selector generations, block detection, baseline, trusted-run diffing
 src/cli.py            the daily table and out/report.md
-tests/                11 tests - three assert the rewritten baseline rule holds
+src/actor.py          Apify Actor entry point: input, one item per URL, persisted baseline
+src/transport.py      Transport interface, urllib transport, fake transport, polite Fetcher
+src/storage.py        local Apify storage layout / Apify SDK adapter (lazy import)
+src/billing.py        pay-per-event names
+.actor/               actor.json, input_schema.json
+tests/                50 tests - the baseline rule is asserted on the replay and across Actor runs
 ```
