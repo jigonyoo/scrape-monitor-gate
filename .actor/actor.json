@@ -1,0 +1,36 @@
+{
+  "actorSpecification": 1,
+  "name": "scrape-monitor-gate",
+  "title": "Scrape Monitor Gate",
+  "description": "Checks your URLs and reports its own failures: SCHEMA_DRIFT, SOFT_BLOCK and PARTIAL, compared against the last run it trusts. A broken day never becomes the baseline.",
+  "version": "0.1",
+  "buildTag": "latest",
+  "input": "./input_schema.json",
+  "dockerfile": "../Dockerfile",
+  "storages": {
+    "dataset": {
+      "actorSpecification": 1,
+      "title": "Page checks",
+      "views": {
+        "overview": {
+          "title": "Overview",
+          "transformation": {
+            "fields": ["url", "checkedAt", "status", "rowCount", "selector", "note", "httpStatus"]
+          },
+          "display": {
+            "component": "table",
+            "properties": {
+              "url": {"label": "URL", "format": "link"},
+              "checkedAt": {"label": "Checked at", "format": "text"},
+              "status": {"label": "Status", "format": "text"},
+              "rowCount": {"label": "Rows", "format": "number"},
+              "selector": {"label": "Selector", "format": "text"},
+              "note": {"label": "Note", "format": "text"},
+              "httpStatus": {"label": "HTTP", "format": "number"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "title": "Scrape Monitor Gate input",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "startUrls": {
+      "title": "URLs to check",
+      "type": "array",
+      "description": "Listing pages to check on every run. Each URL keeps its own baseline between runs.",
+      "editor": "requestListSources",
+      "prefill": [{"url": "https://example.com/listing"}]
+    },
+    "selectors": {
+      "title": "Fields and selectors",
+      "type": "array",
+      "description": "Selector generations, tried in order. Each is {\"name\", \"row\", \"key\", \"value\"}: `row` is a regular expression whose first group is one row, `key` and `value` are regular expressions whose first group is the field inside that row. `key` identifies the item between runs, `value` is the field watched for changes. Keep old generations listed: a page that only the old or only the new one matches is how SCHEMA_DRIFT is detected. Leave empty to use the built-in demo selectors.",
+      "editor": "json",
+      "prefill": [
+        {"name": "gen2", "row": "<li class=\"listing\">(.*?)</li>", "key": "<span class=\"title\">(.*?)</span>", "value": "<span class=\"amount\">(.*?)</span>"},
+        {"name": "gen1", "row": "<li class=\"row\">(.*?)</li>", "key": "<span class=\"name\">(.*?)</span>", "value": "<span class=\"price\">(.*?)</span>"}
+      ]
+    },
+    "maxPages": {
+      "title": "Max pages",
+      "type": "integer",
+      "description": "At most this many URLs are checked (and charged) per run. Extra URLs are skipped and logged.",
+      "default": 50,
+      "minimum": 1
+    },
+    "requestIntervalMillis": {
+      "title": "Request interval",
+      "type": "integer",
+      "description": "Minimum time between two requests to the same domain, robots.txt and retries included.",
+      "default": 2000,
+      "minimum": 0,
+      "unit": "ms"
+    },
+    "requestTimeoutSecs": {
+      "title": "Request timeout",
+      "type": "integer",
+      "description": "Per-request timeout. Timed-out requests are retried with exponential backoff.",
+      "default": 30,
+      "minimum": 1,
+      "unit": "seconds"
+    },
+    "userAgent": {
+      "title": "User agent",
+      "type": "string",
+      "description": "Sent with every request and used to match robots.txt rules. Identify yourself honestly.",
+      "editor": "textfield",
+      "default": "scrape-monitor-gate/0.1"
+    }
+  },
+  "required": ["startUrls"]
+}
